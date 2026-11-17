@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>СИМУЛЯТОР ТЕМЩИКА 3.0</title>
+<!-- Telegram WebApp SDK -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #0a0d14;
+    --card: #131926;
+    --green: #10b981;
+    --gold: #f59e0b;
+    --pink: #ec4899;
+    --blue: #38bdf8;
+    --border: #1f293d;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+  
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg); color: #f8fafc;
+    font-family: -apple-system, system-ui, sans-serif;
+    overflow: hidden; position: relative;
+  }
+
+  /* ШАПКА */
+  .top-bar {
+    position: fixed; top: 0; left: 0; right: 0; height: 60px;
+    padding: 10px 16px; display: flex; justify-content: space-between; align-items: center;
+    background: var(--card); border-bottom: 1px solid var(--border); z-index: 100;
+  }
+  .user-info { display: flex; flex-direction: column; }
+  .user-name { font-size: 13px; font-weight: bold; }
+  .user-rank { font-size: 10px; color: var(--gold); text-transform: uppercase; font-weight: 800; }
+  .stat-passive { text-align: right; font-size: 11px; color: #94a3b8; }
+  .stat-passive span { color: var(--green); font-weight: bold; display: block; }
+
+  /* ОСНОВНОЙ КОНТЕНТ */
+  .main-content {
+    position: absolute; top: 60px; bottom: 70px; left: 0; right: 0;
+    overflow-y: auto; padding: 16px; display: flex; flex-direction: column; align-items: center;
+  }
+  .tab-screen { display: none; width: 100%; max-width: 450px; flex-direction: column; align-items: center; }
+  .tab-screen.active { display: flex; }
+
+  /* ЭКРАН 1: КЛИКЕР */
+  .balance-val { font-size: 38px; font-weight: 900; margin: 15px 0 5px 0; text-shadow: 0 0 15px rgba(16,185,129,0.3); }
+  .fever-meter { width: 100%; height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; margin-bottom: 25px; }
+  .fever-fill { width: 0%; height: 100%; background: linear-gradient(90deg, var(--blue), var(--pink)); transition: width 0.1s linear; }
+  .tap-target { 
+    width: 200px; height: 200px; border-radius: 50%; 
+    background: radial-gradient(circle, #1e293b, #0f172a); 
+    border: 6px solid var(--border); display: flex; align-items: center; justify-content: center; 
+    font-size: 90px; cursor: pointer; box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+    transition: transform 0.05s;
+  }
+  .tap-target:active { transform: scale(0.92); }
+  .energy-box { margin-top: 25px; font-size: 14px; color: #94a3b8; font-weight: 600; }
+
+  /* ЭКРАН 2: КРАШ */
+  .crash-area { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 15px; text-align: center; }
+  .crash-field { 
+    height: 180px; background: #070912; border-radius: 12px; position: relative; overflow: hidden; margin: 10px 0;
+    border-bottom: 2px solid var(--blue);
+  }
+  .plane { position: absolute; left: 10%; bottom: 20px; font-size: 40px; transition: all 0.1s linear; }
+  .crash-mult { font-size: 45px; font-weight: 900; color: var(--gold); margin: 10px 0; }
+
+  /* ЭКРАН 3: КАЗИК */
+  .roulette-wheel { width: 150px; height: 150px; border-radius: 50%; border: 8px solid var(--border); margin: 20px 0; display: flex; align-items: center; justify-content: center; font-size: 50px; background: #1e293b; }
+  .bet-btns { display: flex; gap: 8px; width: 100%; margin-top: 15px; }
+  .btn-bet { flex: 1; border: none; padding: 12px; border-radius: 10px; color: #fff; font-weight: 800; cursor: pointer; font-size: 12px; }
+  .red { background: #e11d48; } .black { background: #1e293b; border: 1px solid #334155; } .zero { background: #16a34a; }
+
+  /* СПИСКИ (МАГАЗИН / ГАРАЖ) */
+  .cards-list { width: 100%; display: flex; flex-direction: column; gap: 10px; padding-bottom: 20px; }
+  .card-item { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px; display: flex; justify-content: space-between; align-items: center; }
+  .card-info { display: flex; align-items: center; gap: 12px; }
+  .card-icon { font-size: 28px; }
+  .btn-buy { background: var(--green); color: #fff; border: none; font-weight: 800; padding: 10px 16px; border-radius: 10px; cursor: pointer; font-size: 12px; }
+  .btn-buy:disabled { opacity: 0.4; pointer-events: none; }
+
+  /* МЕНЮ */
+  .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; height: 70px; display: flex; justify-content: space-around; background: var(--card); border-top: 1px solid var(--border); z-index: 1000; }
+  .nav-item { display: flex; flex-direction: column; align-items: center; justify-content: center; background: none; border: none; color: #64748b; font-size: 10px; font-weight: 700; flex: 1; gap: 4px; }
+  .nav-item.active { color: var(--green); }
+  .nav-item span { font-size: 22px; }
+
+  .floating-num { position: fixed; font-weight: 900; font-size: 26px; color: var(--green); pointer-events: none; animation: floatUp 0.7s forwards; z-index: 2000; }
+  @keyframes floatUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-80px); } }
+
+  input[type="number"] { width: 100%; background: #0f172a; border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="user-info">
+    <span class="user-name" id="uName">ГЛАВНЫЙ ТЕМЩИК</span>
+    <span class="user-rank" id="uRank">ШКЕТ</span>
+  </div>
+  <div class="stat-passive">Доход: <span id="pIncomeDisplay">+0 ₽/сек</span></div>
+</div>
+
+<div class="main-content">
+  <!-- 1. СУЕТА (КЛИКЕР) -->
+  <div class="tab-screen active" id="screen-clicker">
+    <div class="balance-val" id="balanceDisplay">500 ₽</div>
+    <div id="feverAlert" style="color:var(--pink); font-size:12px; height:15px; font-weight:bold; text-transform:uppercase;"></div>
+    <div class="fever-meter"><div class="fever-fill" id="feverFill"></div></div>
+    <div class="tap-target" id="tapButton">👟</div>
+    <div class="energy-box">⚡ Энергия: <b id="energyVal" style="color:#fff;">1000 / 1000</b></div>
+  </div>
+
+  <!-- 2. ТЕМКИ (ПРОКАЧКА) -->
+  <div class="tab-screen" id="screen-biz">
+    <h2 style="margin-bottom:15px; width:100%; text-align:left;">💼 ТЕМКИ И ЭНЕРГИЯ</h2>
+    <div class="cards-list" id="bizList"></div>
+  </div>
+
+  <!-- 3. КРАШ -->
+  <div class="tab-screen" id="screen-crash">
+    <h2 style="margin-bottom:10px; width:100%; text-align:left;">✈️ КРАШ-ТЕМКА</h2>
+    <div class="crash-area">
+      <div class="crash-field"><div class="plane" id="plane">✈️</div></div>
+      <div class="crash-mult" id="crashMult">1.00x</div>
+      <input type="number" id="crashBet" value="100" placeholder="Твоя ставка">
+      <button class="btn-buy" id="crashBtn" style="width:100%; padding:15px;" onclick="handleCrash()">ВЗЛЁТ</button>
+      <p id="crashStatus" style="margin-top:10px; font-size:12px; color:#94a3b8;">Погнали суетить?</p>
+    </div>
+  </div>
+
+  <!-- 4. КАЗИК -->
+  <div class="tab-screen" id="screen-casino">
+    <h2 style="margin-bottom:10px; width:100%; text-align:left;">🎰 КАЗИК (РУЛЕТКА)</h2>
+    <div class="crash-area">
+      <div class="roulette-wheel" id="wheel">🎲</div>
+      <input type="number" id="casinoBet" value="100" placeholder="Ставка">
+      <div class="bet-btns">
+        <button class="btn-bet red" onclick="playRoulette('red')">КРАСНОЕ x2</button>
+        <button class="btn-bet black" onclick="playRoulette('black')">ЧЕРНОЕ x2</button>
+        <button class="btn-bet zero" onclick="playRoulette('zero')">ZERO x14</button>
+      </div>
+      <p id="casinoStatus" style="margin-top:15px; font-size:14px; font-weight:bold; color:var(--gold);">Делайте ваши ставки!</p>
+    </div>
+  </div>
+
+  <!-- 5. ГАРАЖ -->
+  <div class="tab-screen" id="screen-garage">
+    <h2 style="margin-bottom:15px; width:100%; text-align:left;">🏎️ ТВОЙ ГАРАЖ</h2>
+    <div class="cards-list" id="garageList"></div>
+  </div>
+</div>
+
+<nav class="bottom-nav">
+  <button class="nav-item active" onclick="switchTab('clicker', this)"><span>💸</span>Суета</button>
+  <button class="nav-item" onclick="switchTab('biz', this)"><span>🏢</span>Темки</button>
+  <button class="nav-item" onclick="switchTab('crash', this)"><span>✈️</span>Краш</button>
+  <button class="nav-item" onclick="switchTab('casino', this)"><span>🎰</span>Казик</button>
+  <button class="nav-item" onclick="switchTab('garage', this)"><span>🏎️</span>Гараж</button>
+</nav>
+
+<script>
+// --- ИНИЦИАЛИЗАЦИЯ TG ---
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.expand();
+  const name = tg.initDataUnsafe?.user?.first_name || "Главный";
+  document.getElementById('uName').innerText = name.toUpperCase() + " ТЕМЩИК";
+}
+
+// --- СОСТОЯНИЕ (STATE) ---
+let state = {
+  balance: 500,
+  clickPower: 1,
+  passiveIncome: 0,
+  energy: 1000,
+  maxEnergy: 1000,
+  combo: 0,
+  fever: false,
+  carIcon: '👟',
+  bizLevels: [0, 0, 0, 0, 0, 0], // Паленая аккустика, Вейп, Автомойка, Майнинг, Обменник, Энергия
+  carsBought: [false, false, false, false]
+};
+
+// --- ЗАГРУЗКА ---
+const saved = localStorage.getItem('hustle_v3_final');
+if (saved) { state = JSON.parse(saved); }
+
+function save() { localStorage.setItem('hustle_v3_final', JSON.stringify(state)); }
+
+// --- ДАННЫЕ ОБЪЕКТОВ ---
+const businesses = [
+  { id: 0, icon: '🎧', name: 'Паленая Акустика', base: 150, profit: 4 },
+  { id: 1, icon: '💨', name: 'Вейп Островок', base: 900, profit: 22 },
+  { id: 2, icon: '🧼', name: 'Автомойка 24/7', base: 4500, profit: 95 },
+  { id: 3, icon: '🖥️', name: 'Гаражный Майнинг', base: 22000, profit: 450 },
+  { id: 4, icon: '🏦', name: 'P2P Обменник Сити', base: 110000, profit: 2400 },
+  { id: 5, icon: '🔋', name: 'ПАУЭРБАНК (Энергия)', base: 1000, energy: 500 }
+];
+
+const cars = [
+  { id: 0, icon: '🚗', name: 'Четырка', cost: 2500, boost: 5 },
+  { id: 1, icon: '🏎️', name: 'Марк 2', cost: 15000, boost: 25 },
+  { id: 2, icon: '🖤', name: 'BMW M5 F90', cost: 95000, boost: 125 },
+  { id: 3, icon: '👑', name: 'Черный Гелик', cost: 600000, boost: 650 }
+];
+
+// --- ОБНОВЛЕНИЕ ИНТЕРФЕЙСА ---
+function updateUI() {
+  document.getElementById('balanceDisplay').innerText = Math.floor(state.balance).toLocaleString() + ' ₽';
+  document.getElementById('pIncomeDisplay').innerText = '+' + state.passiveIncome + ' ₽/сек';
+  document.getElementById('energyVal').innerText = Math.floor(state.energy) + ' / ' + state.maxEnergy;
+  document.getElementById('tapButton').innerText = state.carIcon;
+  
+  const ranks = ["Шкет", "Перекуп", "Суетолог", "Магнат", "Хозяин"];
+  const rIdx = Math.min(Math.floor(state.balance / 100000), 4);
+  document.getElementById('uRank').innerText = ranks[rIdx];
+
+  renderLists();
+}
+
+// --- КЛИКЕР ---
+document.getElementById('tapButton').addEventListener('pointerdown', (e) => {
+  if (state.energy < 1) return;
+  state.energy--;
+  let earned = state.clickPower * (state.fever ? 5 : 1);
+  state.balance += earned;
+  
+  if (!state.fever) {
+    state.combo = Math.min(state.combo + 5, 100);
+    document.getElementById('feverFill').style.width = state.combo + '%';
+    if (state.combo >= 100) {
+        state.fever = true;
+        document.getElementById('feverAlert').innerText = "🔥 СУЕТА x5 ВКЛЮЧЕНА 🔥";
+        let fInterval = setInterval(() => {
+            state.combo -= 4;
+            document.getElementById('feverFill').style.width = state.combo + '%';
+            if (state.combo <= 0) { clearInterval(fInterval); state.fever = false; document.getElementById('feverAlert').innerText = ""; }
+        }, 100);
+    }
+  }
+  
+  let num = document.createElement('div');
+  num.className = 'floating-num';
+  num.innerText = '+' + earned;
+  num.style.left = e.clientX + 'px'; num.style.top = e.clientY + 'px';
+  document.body.appendChild(num);
+  setTimeout(() => num.remove(), 700);
+  updateUI();
+});
+
+// --- МАГАЗИН И ГАРАЖ ---
+function renderLists() {
+  const bList = document.getElementById('bizList');
+  bList.innerHTML = '';
+  businesses.forEach(b => {
+    let lvl = state.bizLevels[b.id];
+    let cost = Math.floor(b.base * Math.pow(1.5, lvl));
+    bList.innerHTML += `<div class="card-item"><div class="card-info"><span class="card-icon">${b.icon}</span><div><b>${b.name} (${lvl})</b><br><small>${b.profit ? '+'+b.profit+' ₽/с' : '+500⚡'}</small></div></div><button class="btn-buy" ${state.balance < cost ? 'disabled' : ''} onclick="buyBiz(${b.id}, ${cost})">${cost} ₽</button></div>`;
+  });
+
+  const gList = document.getElementById('garageList');
+  gList.innerHTML = '';
+  cars.forEach(c => {
+    let bought = state.carsBought[c.id];
+    gList.innerHTML += `<div class="card-item"><div class="card-info"><span class="card-icon">${c.icon}</span><div><b>${c.name}</b><br><small>+${c.boost} к клику</small></div></div><button class="btn-buy" ${(bought || state.balance < c.cost) ? 'disabled' : ''} onclick="buyCar(${c.id})">${bought ? 'КУПЛЕНО' : c.cost+' ₽'}</button></div>`;
+  });
+}
+
+window.buyBiz = (id, cost) => {
+  if (state.balance >= cost) {
+    state.balance -= cost;
+    state.bizLevels[id]++;
+    let b = businesses[id];
+    if (b.profit) state.passiveIncome += b.profit;
+    if (b.energy) state.maxEnergy += b.energy;
+    save(); updateUI();
+  }
+};
+
+window.buyCar = (id) => {
+  let c = cars[id];
+  if (state.balance >= c.cost && !state.carsBought[id]) {
+    state.balance -= c.cost;
+    state.carsBought[id] = true;
+    state.clickPower += c.boost;
+    state.carIcon = c.icon;
+    save(); updateUI();
+  }
+};
+
+// --- КРАШ ---
+let crashActive = false;
+let crashTimer = null;
+let currentMult = 1.0;
+
+function handleCrash() {
+  const btn = document.getElementById('crashBtn');
+  const bet = parseInt(document.getElementById('crashBet').value);
+  const status = document.getElementById('crashStatus');
+  const plane = document.getElementById('plane');
+
+  if (!crashActive) {
+    if (isNaN(bet) || bet <= 0 || bet > state.balance) { alert("Маловато бабок!"); return; }
+    state.balance -= bet;
+    crashActive = true;
+    currentMult = 1.0;
+    btn.innerText = "ЗАБРАТЬ!";
+    btn.style.background = "var(--gold)";
+    status.innerText = "Темка крутится, самолет летит...";
+    
+    let crashPoint = 1.1 + (Math.random() * 3.5); // Рандом падения
+    
+    crashTimer = setInterval(() => {
+      currentMult += 0.03;
+      document.getElementById('crashMult').innerText = currentMult.toFixed(2) + "x";
+      plane.style.left = (10 + (currentMult * 15)) + "%";
+      plane.style.bottom = (20 + (currentMult * 20)) + "px";
+      
+      if (currentMult >= crashPoint) {
+        clearInterval(crashTimer);
+        crashActive = false;
+        document.getElementById('crashMult').innerText = "💥 КРАШ!";
+        status.innerText = "ОМОН накрыл! Все бабки сгорели.";
+        btn.innerText = "ВЗЛЁТ";
+        btn.style.background = "var(--green)";
+        plane.style.left = "10%"; plane.style.bottom = "20px";
+        updateUI(); save();
+      }
+    }, 100);
+  } else {
+    clearInterval(crashTimer);
+    crashActive = false;
+    let win = Math.floor(bet * currentMult);
+    state.balance += win;
+    status.innerText = "Успел! Забрал " + win + " ₽!";
+    btn.innerText = "ВЗЛЁТ";
+    btn.style.background = "var(--green)";
+    document.getElementById('crashMult').innerText = "1.00x";
+    plane.style.left = "10%"; plane.style.bottom = "20px";
+    updateUI(); save();
+  }
+}
+
+// --- КАЗИК ---
+function playRoulette(choice) {
+  const bet = parseInt(document.getElementById('casinoBet').value);
+  const status = document.getElementById('casinoStatus');
+  if (isNaN(bet) || bet <= 0 || bet > state.balance) { alert("Ставка не лезет!"); return; }
+  
+  state.balance -= bet;
+  status.innerText = "Ставки сделаны... Крутим!";
+  
+  setTimeout(() => {
+    const res = Math.random();
+    let winner = "";
+    if (res < 0.05) winner = "zero";
+    else if (res < 0.52) winner = "red";
+    else winner = "black";
+    
+    if (choice === winner) {
+      let mult = (winner === "zero") ? 14 : 2;
+      let win = bet * mult;
+      state.balance += win;
+      status.style.color = "var(--green)";
+      status.innerText = `ВЫПАЛО ${winner.toUpperCase()}! Твой выигрыш: ${win} ₽`;
+    } else {
+      status.style.color = "#e11d48";
+      status.innerText = `ВЫПАЛО ${winner.toUpperCase()}. Попробуй еще раз!`;
+    }
+    updateUI(); save();
+  }, 1000);
+}
+
+// --- НАВИГАЦИЯ ---
+function switchTab(t, btn) {
+  document.querySelectorAll('.tab-screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('screen-'+t).classList.add('active');
+  btn.classList.add('active');
+}
+
+// --- ЦИКЛЫ ---
+setInterval(() => { state.balance += state.passiveIncome; updateUI(); save(); }, 1000);
+setInterval(() => { if (state.energy < state.maxEnergy) state.energy = Math.min(state.energy + 2, state.maxEnergy); updateUI(); }, 1000);
+
+updateUI();
+</script>
+</body>
+</html>
